@@ -109,11 +109,11 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text
 .cat-btn.on{border-color:var(--accent);background:var(--accent-light);color:var(--accent)}
 .save-btn{width:100%;padding:.8rem;background:var(--ocean);color:#fff;border:none;border-radius:var(--radius-sm);font-size:.9rem;font-weight:500;cursor:pointer;font-family:inherit;margin-top:.5rem}
 
-/* CHARTS — fix iOS Safari ghost canvas */
+/* CHARTS */
 .chart-card{background:var(--card);border-radius:var(--radius);padding:1.1rem;box-shadow:var(--shadow);margin-bottom:.75rem;overflow:hidden}
 .chart-title{font-size:.82rem;font-weight:500;margin-bottom:.75rem}
-.chart-wrap{position:relative;width:100%;height:200px}
-.chart-wrap canvas{position:absolute;top:0;left:0;width:100%!important;height:100%!important}
+.chart-wrap{position:relative;width:100%;height:200px;overflow:hidden}
+.chart-wrap canvas{display:block;width:100%!important;height:200px!important;max-height:200px}
 
 .day-row{background:var(--card);border-radius:var(--radius-sm);padding:.75rem 1rem;margin-bottom:.5rem;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between}
 .day-row-left{font-size:.85rem;font-weight:500}
@@ -399,6 +399,7 @@ let records=[], persons=[], settings={budget:100000,rate:0.22};
 let currentImageB64=null, selectedWho=null, selectedCat=null;
 let editingId=null, mSelectedWho=null, mSelectedCat=null;
 let chartDaily=null, chartCat=null, chartPay=null;
+let toastTimer=null;
 
 // ── helpers ──
 function jpy2twd(jpy){ return Math.round((jpy||0)*settings.rate); }
@@ -550,13 +551,16 @@ async function analyzeReceipt(){
 {"shop":"店家名稱翻譯成繁體中文","date":"YYYY-MM-DD（找不到填今天）","time":"HH:MM（找不到填空字串）","amount":總金額數字僅數字，"items":"主要品項繁體中文逗號分隔","category":"從以下選一個：🍜 餐飲/🛍️ 購物/🚕 交通/🏖️ 景點/🏨 住宿/🍦 甜點/💊 藥妝/🎁 伴手禮/🎡 體驗/📦 其他"}
 只回傳 JSON 物件，不含任何說明。`;
   try{
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:currentImageB64}}]}]})
     });
-    if(!res.ok) throw new Error('API '+res.status);
     const data=await res.json();
+    if(!res.ok){
+      const errMsg=data?.error?.message||('API '+res.status);
+      throw new Error(errMsg);
+    }
     const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
     const cleaned=raw.replace(/```json|```/g,'').trim();
     const json=JSON.parse(cleaned);
@@ -564,8 +568,8 @@ async function analyzeReceipt(){
     document.getElementById('resultForm').classList.add('show');
     showToast('✅ 辨識完成！請確認資料');
   } catch(err){
-    console.error(err);
-    showToast('⚠️ 辨識失敗（'+err.message+'），請手動輸入');
+    console.error('Gemini error:',err);
+    showToast('⚠️ 辨識失敗：'+err.message);
     fillForm({});
     document.getElementById('resultForm').classList.add('show');
   }
@@ -794,11 +798,10 @@ function download(content,filename,type){
 }
 
 // ── toast ──
-let toastTimer;
 function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2000);
 }
 
 // close modal on overlay click
