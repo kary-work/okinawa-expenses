@@ -533,20 +533,21 @@ async function analyzeReceipt(){
   const prompt=`你是一個日本收據辨識助理。請仔細分析這張收據圖片，回傳純 JSON（不含 markdown 代碼塊），欄位如下：
 {"shop":"店家名稱翻譯成繁體中文","date":"YYYY-MM-DD（找不到填今天）","time":"HH:MM（找不到填空字串）","amount":總金額數字僅數字，"items":"主要品項繁體中文逗號分隔","category":"從以下選一個：🍜 餐飲/🛍️ 購物/🚕 交通/🏖️ 景點/🏨 住宿/🍦 甜點/💊 藥妝/🎁 伴手禮/🎡 體驗/📦 其他"}
 只回傳 JSON 物件，不含任何說明。`;
-  const MODELS=['gemini-2.0-flash','gemini-2.5-flash-lite-preview-06-17','gemini-2.5-flash'];
+  const MODELS=['gemini-2.0-flash','gemini-2.5-flash','gemini-2.0-flash-lite'];
+  let diagLog=[];
   let lastErr=null;
   for(const model of MODELS){
     try{
-      showToast('⏳ 辨識中（'+model+'）...');
+      showToast('⏳ 嘗試 '+model+'...');
       const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:currentImageB64}}]}]})
       });
       const data=await res.json();
+      diagLog.push(`[${model}] HTTP ${res.status}: ${JSON.stringify(data).slice(0,200)}`);
       if(!res.ok){
-        lastErr=new Error(data?.error?.message||('API '+res.status));
-        console.warn(model+' failed:',lastErr.message);
+        lastErr=new Error(data?.error?.message||('HTTP '+res.status));
         continue;
       }
       const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
@@ -559,15 +560,22 @@ async function analyzeReceipt(){
       return;
     } catch(err){
       lastErr=err;
-      console.warn(model+' error:',err);
+      diagLog.push(`[${model}] Exception: ${err.message}`);
     }
   }
-  // all models failed
-  console.error('All models failed:',lastErr);
-  showToast('⚠️ 辨識失敗：'+lastErr?.message);
+  // all failed — show diagnostic box
+  btn.classList.remove('loading'); btn.disabled=false;
   fillForm({});
   document.getElementById('resultForm').classList.add('show');
-  btn.classList.remove('loading'); btn.disabled=false;
+  // inject diag panel
+  let diagEl=document.getElementById('diagPanel');
+  if(!diagEl){
+    diagEl=document.createElement('div');
+    diagEl.id='diagPanel';
+    diagEl.style.cssText='background:#1a1a1a;color:#0f0;font-family:monospace;font-size:.7rem;padding:.75rem;border-radius:8px;margin-top:.75rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto';
+    document.getElementById('resultForm').prepend(diagEl);
+  }
+  diagEl.textContent='=== 診斷資訊（請截圖給 Claude）===\nKey末碼: ...'+GEMINI_KEY.slice(-6)+'\n\n'+diagLog.join('\n\n');
 }
 
 function fillForm(d){
