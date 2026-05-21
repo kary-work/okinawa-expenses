@@ -533,29 +533,40 @@ async function analyzeReceipt(){
   const prompt=`你是一個日本收據辨識助理。請仔細分析這張收據圖片，回傳純 JSON（不含 markdown 代碼塊），欄位如下：
 {"shop":"店家名稱翻譯成繁體中文","date":"YYYY-MM-DD（找不到填今天）","time":"HH:MM（找不到填空字串）","amount":總金額數字僅數字，"items":"主要品項繁體中文逗號分隔","category":"從以下選一個：🍜 餐飲/🛍️ 購物/🚕 交通/🏖️ 景點/🏨 住宿/🍦 甜點/💊 藥妝/🎁 伴手禮/🎡 體驗/📦 其他"}
 只回傳 JSON 物件，不含任何說明。`;
-  try{
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:currentImageB64}}]}]})
-    });
-    const data=await res.json();
-    if(!res.ok){
-      const errMsg=data?.error?.message||('API '+res.status);
-      throw new Error(errMsg);
+  const MODELS=['gemini-2.0-flash','gemini-2.5-flash-lite-preview-06-17','gemini-2.5-flash'];
+  let lastErr=null;
+  for(const model of MODELS){
+    try{
+      showToast('⏳ 辨識中（'+model+'）...');
+      const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:currentImageB64}}]}]})
+      });
+      const data=await res.json();
+      if(!res.ok){
+        lastErr=new Error(data?.error?.message||('API '+res.status));
+        console.warn(model+' failed:',lastErr.message);
+        continue;
+      }
+      const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+      const cleaned=raw.replace(/```json|```/g,'').trim();
+      const json=JSON.parse(cleaned);
+      fillForm(json);
+      document.getElementById('resultForm').classList.add('show');
+      showToast('✅ 辨識完成！請確認資料');
+      btn.classList.remove('loading'); btn.disabled=false;
+      return;
+    } catch(err){
+      lastErr=err;
+      console.warn(model+' error:',err);
     }
-    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
-    const cleaned=raw.replace(/```json|```/g,'').trim();
-    const json=JSON.parse(cleaned);
-    fillForm(json);
-    document.getElementById('resultForm').classList.add('show');
-    showToast('✅ 辨識完成！請確認資料');
-  } catch(err){
-    console.error('Gemini error:',err);
-    showToast('⚠️ 辨識失敗：'+err.message);
-    fillForm({});
-    document.getElementById('resultForm').classList.add('show');
   }
+  // all models failed
+  console.error('All models failed:',lastErr);
+  showToast('⚠️ 辨識失敗：'+lastErr?.message);
+  fillForm({});
+  document.getElementById('resultForm').classList.add('show');
   btn.classList.remove('loading'); btn.disabled=false;
 }
 
