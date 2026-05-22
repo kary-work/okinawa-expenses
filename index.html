@@ -849,10 +849,26 @@ function importJSON(e){
 }
 function clearAll(){ document.getElementById('clearModal').classList.add('show'); }
 function confirmClearAll(){ records=[]; save(); renderAll(); document.getElementById('clearModal').classList.remove('show'); showToast('已清除所有記錄'); }
-function download(content,filename,type){
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([content],{type}));
-  a.download=filename; a.click();
+function download(content, filename, type){
+  // iOS Safari doesn't support URL.createObjectURL for downloads
+  // Use data URI approach instead
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(isIOS){
+    const dataUri = type.includes('json')
+      ? 'data:application/json;charset=utf-8,' + encodeURIComponent(content)
+      : 'data:text/csv;charset=utf-8,' + encodeURIComponent(content);
+    const a = document.createElement('a');
+    a.href = dataUri;
+    a.download = filename;
+    a.click();
+    // Fallback: open in new tab if download doesn't trigger
+    setTimeout(()=>{ window.open(dataUri,'_blank'); }, 300);
+  } else {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content],{type}));
+    a.download = filename;
+    a.click();
+  }
 }
 
 // ── toast ──
