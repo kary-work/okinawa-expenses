@@ -548,7 +548,6 @@ async function analyzeReceipt(){
 {"shop":"店家名稱翻譯成繁體中文","date":"YYYY-MM-DD（找不到填今天）","time":"HH:MM（找不到填空字串）","amount":總金額數字僅數字，"items":"主要品項繁體中文逗號分隔","category":"從以下選一個：🍜 餐飲/🛍️ 購物/🚕 交通/🏖️ 景點/🏨 住宿/🍦 甜點/💊 藥妝/🎁 伴手禮/🎡 體驗/📦 其他"}
 只回傳 JSON 物件，不含任何說明。`;
   const MODELS=['gemini-2.0-flash','gemini-2.5-flash','gemini-2.0-flash-lite'];
-  let diagLog=[];
   let lastErr=null;
   for(const model of MODELS){
     try{
@@ -559,7 +558,6 @@ async function analyzeReceipt(){
         body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:currentImageB64}}]}]})
       });
       const data=await res.json();
-      diagLog.push(`[${model}] HTTP ${res.status}: ${JSON.stringify(data).slice(0,200)}`);
       if(!res.ok){
         lastErr=new Error(data?.error?.message||('HTTP '+res.status));
         continue;
@@ -574,22 +572,13 @@ async function analyzeReceipt(){
       return;
     } catch(err){
       lastErr=err;
-      diagLog.push(`[${model}] Exception: ${err.message}`);
     }
   }
-  // all failed — show diagnostic box
+  // all failed — show toast only
   btn.classList.remove('loading'); btn.disabled=false;
   fillForm({});
   document.getElementById('resultForm').classList.add('show');
-  // inject diag panel
-  let diagEl=document.getElementById('diagPanel');
-  if(!diagEl){
-    diagEl=document.createElement('div');
-    diagEl.id='diagPanel';
-    diagEl.style.cssText='background:#1a1a1a;color:#0f0;font-family:monospace;font-size:.7rem;padding:.75rem;border-radius:8px;margin-top:.75rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto';
-    document.getElementById('resultForm').prepend(diagEl);
-  }
-  diagEl.textContent='=== 診斷資訊（請截圖給 Claude）===\nKey末碼: ...'+GEMINI_KEY.slice(-6)+'\n\n'+diagLog.join('\n\n');
+  showToast('⚠️ 辨識失敗，請手動輸入或稍後再試');
 }
 
 function fillForm(d){
@@ -757,7 +746,7 @@ function renderCharts(){
       <div class="chart-title">支付方式分布</div>
       <div class="chart-wrap" id="wrapPay" style="height:200px;overflow:hidden"></div>
     </div>
-    <div class="section-title">各天花費</div>
+    <div class="section-title">每日花費</div>
     <div id="dayList"></div>
     <div class="section-title">TOP 10 消費</div>
     <div class="chart-card" id="top10"></div>`;
@@ -765,7 +754,7 @@ function renderCharts(){
   [chartDaily,chartCat,chartPay].forEach(c=>{ if(c) c.destroy(); });
   chartDaily=chartCat=chartPay=null;
 
-  const labels=TRIP_DAYS.map(d=>d.label.split('・')[0]);
+  const labels=TRIP_DAYS.map(d=>`Day ${d.day}`);
   const vals=TRIP_DAYS.map(d=>records.filter(r=>r.date===d.date).reduce((s,r)=>s+(r.amount||0),0));
   chartDaily=new Chart(makeCanvas('wrapDaily'),{type:'bar',data:{labels,datasets:[{data:vals,backgroundColor:'#0a4a6b',borderRadius:8,barPercentage:.6}]},options:{plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'¥'+v.toLocaleString()},grid:{color:'rgba(0,0,0,0.05)'}},x:{grid:{display:false}}},responsive:false,maintainAspectRatio:false}});
 
@@ -780,7 +769,7 @@ function renderCharts(){
   document.getElementById('dayList').innerHTML=TRIP_DAYS.map(d=>{
     const t=records.filter(r=>r.date===d.date).reduce((s,r)=>s+(r.amount||0),0);
     const n=records.filter(r=>r.date===d.date).length;
-    return `<div class="day-row"><div class="day-row-left">${d.label}<div class="day-row-sub">${n} 筆</div></div><div class="day-row-right"><div class="day-row-jpy">${fmtJpy(t)}</div><div class="day-row-twd">${fmtTwd(t)}</div></div></div>`;
+    return `<div class="day-row"><div class="day-row-left">Day ${d.day}<div class="day-row-sub">${n} 筆</div></div><div class="day-row-right"><div class="day-row-jpy">${fmtJpy(t)}</div><div class="day-row-twd">${fmtTwd(t)}</div></div></div>`;
   }).join('');
 
   const sorted=[...records].sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,10);
