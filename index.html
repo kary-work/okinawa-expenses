@@ -271,6 +271,15 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text
 <div class="page" id="page-settings">
   <div class="section-title">旅行設定</div>
   <div class="setting-row">
+    <label>Gemini API Key（用於 AI 辨識收據）</label>
+    <div style="display:flex;gap:.5rem">
+      <input type="password" id="sGeminiKey" placeholder="AIzaSy..." style="flex:1" oninput="previewKey()">
+      <button onclick="saveGeminiKey()" style="padding:.5rem .85rem;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:.82rem;white-space:nowrap">儲存</button>
+    </div>
+    <div id="keyStatus" style="font-size:.72rem;margin-top:.35rem"></div>
+    <div style="font-size:.7rem;color:var(--muted);margin-top:.35rem">前往 <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a> 建立免費 Key</div>
+  </div>
+  <div class="setting-row">
     <label>總預算（¥）</label>
     <input type="number" id="sBudget" placeholder="例：100000" onchange="saveSetting()">
   </div>
@@ -367,7 +376,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text
 <div class="toast" id="toast"></div>
 
 <script>
-const GEMINI_KEY = 'AIzaSyAovM3XCaccuy9UEhcfS3FHJdu24kJeUno';
+let GEMINI_KEY = localStorage.getItem('oka_gemini_key') || '';
 const TRIP_DAYS = [
   {day:1,date:'2026-06-05',label:'Day 1・那霸'},
   {day:2,date:'2026-06-06',label:'Day 2・北部'},
@@ -528,6 +537,11 @@ function handleImage(e){
 // ── AI analysis ──
 async function analyzeReceipt(){
   if(!currentImageB64) return;
+  if(!GEMINI_KEY||!GEMINI_KEY.startsWith('AIza')){
+    showToast('⚠️ 請先到「設定」輸入 Gemini API Key');
+    showPage('settings', document.querySelectorAll('.nav-item')[4]);
+    return;
+  }
   const btn=document.getElementById('aiBtn');
   btn.classList.add('loading'); btn.disabled=true;
   const prompt=`你是一個日本收據辨識助理。請仔細分析這張收據圖片，回傳純 JSON（不含 markdown 代碼塊），欄位如下：
@@ -776,9 +790,35 @@ function renderCharts(){
 }
 
 // ── settings ──
+function saveGeminiKey(){
+  const val=document.getElementById('sGeminiKey').value.trim();
+  if(!val.startsWith('AIza')){showToast('Key 格式不對，應以 AIza 開頭');return;}
+  GEMINI_KEY=val;
+  localStorage.setItem('oka_gemini_key',val);
+  showKeyStatus();
+  showToast('✅ API Key 已儲存');
+}
+function previewKey(){
+  const val=document.getElementById('sGeminiKey').value.trim();
+  const el=document.getElementById('keyStatus'); if(!el) return;
+  if(val.startsWith('AIza')&&val.length>20) el.innerHTML='<span style="color:var(--accent)">✓ 格式正確</span>';
+  else if(val.length>0) el.innerHTML='<span style="color:var(--accent2)">✗ 格式不對</span>';
+  else el.innerHTML='';
+}
+function showKeyStatus(){
+  const el=document.getElementById('keyStatus'); if(!el) return;
+  if(GEMINI_KEY&&GEMINI_KEY.startsWith('AIza')){
+    el.innerHTML='<span style="color:var(--accent)">✓ 已設定（末碼：...'+GEMINI_KEY.slice(-6)+'）</span>';
+    document.getElementById('sGeminiKey').placeholder='已設定，輸入新 Key 可更換';
+  } else {
+    el.innerHTML='<span style="color:var(--accent2)">⚠️ 尚未設定，請先輸入 API Key</span>';
+  }
+}
+
 function renderSettings(){
   document.getElementById('sBudget').value=settings.budget;
   document.getElementById('sRate').value=settings.rate;
+  showKeyStatus();
   renderPersonList();
 }
 function renderPersonList(){
